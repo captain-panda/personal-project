@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+.vite/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+
+# Mongo memory server binaries
+.cache/mongodb-binaries/

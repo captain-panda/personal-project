@@ -1,0 +1,299 @@
+openapi: 3.0.3
+info:
+  title: DSA Learning Platform API
+  version: 1.0.0
+  description: >
+    REST API for the DSA Sheet platform. Access tokens are sent as
+    `Authorization: Bearer <token>`. The refresh token is an httpOnly cookie
+    (`refreshToken`) scoped to `/api/auth`.
+servers:
+  - url: http://localhost:5000
+    description: Local
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: VALIDATION_ERROR }
+            message: { type: string }
+            details: {}
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        displayName: { type: string }
+        createdAt: { type: string, format: date-time }
+        lastLoginAt: { type: string, format: date-time, nullable: true }
+    AuthResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+    Topic:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        order: { type: integer }
+        slug: { type: string }
+        iconUrl: { type: string }
+        problemCount: { type: integer }
+    Problem:
+      type: object
+      properties:
+        id: { type: string }
+        topicId: { type: string }
+        subtopic: { type: string }
+        title: { type: string }
+        slug: { type: string }
+        difficulty: { type: string, enum: [Easy, Medium, Hard] }
+        description: { type: string }
+        order: { type: integer }
+        links:
+          type: object
+          properties:
+            youtube: { type: string }
+            leetcode: { type: string }
+            codeforces: { type: string }
+            article: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+    Stats:
+      type: object
+      properties:
+        totalProblems: { type: integer }
+        totalSolved: { type: integer }
+        percentComplete: { type: integer }
+        byDifficulty:
+          type: array
+          items:
+            type: object
+            properties:
+              difficulty: { type: string }
+              solved: { type: integer }
+              total: { type: integer }
+        byTopic:
+          type: array
+          items:
+            type: object
+            properties:
+              topicId: { type: string }
+              name: { type: string }
+              order: { type: integer }
+              solved: { type: integer }
+              total: { type: integer }
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      security: []
+      summary: Shallow liveness probe
+      responses:
+        '200': { description: OK }
+  /readyz:
+    get:
+      security: []
+      summary: Deep readiness probe (mongo + redis)
+      responses:
+        '200': { description: Ready }
+        '503': { description: Not ready }
+  /metrics:
+    get:
+      security: []
+      summary: Prometheus metrics
+      responses:
+        '200': { description: Metrics exposition }
+  /api/auth/register:
+    post:
+      security: []
+      summary: Register a new user (auto-logs in)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                displayName: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Email already registered }
+  /api/auth/login:
+    post:
+      security: []
+      summary: Log in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401': { description: Invalid credentials }
+  /api/auth/refresh:
+    post:
+      security: []
+      summary: Rotate the refresh token (httpOnly cookie) and get a new access token
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401': { description: Invalid / reused / expired refresh token }
+  /api/auth/logout:
+    post:
+      security: []
+      summary: Revoke the current refresh session and denylist the access token
+      responses:
+        '200': { description: OK }
+  /api/auth/logout-all:
+    post:
+      summary: Log out of all sessions (bumps revokeAfter)
+      responses:
+        '200': { description: OK }
+        '401': { description: Unauthorized }
+  /api/auth/me:
+    get:
+      summary: Current user
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { description: Unauthorized }
+  /api/topics:
+    get:
+      summary: List all topics with problem counts
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  topics:
+                    type: array
+                    items: { $ref: '#/components/schemas/Topic' }
+  /api/topics/{topicId}/problems:
+    get:
+      summary: List problems in a topic
+      parameters:
+        - in: path
+          name: topicId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  topic: { $ref: '#/components/schemas/Topic' }
+                  problems:
+                    type: array
+                    items: { $ref: '#/components/schemas/Problem' }
+        '404': { description: Topic not found }
+  /api/problems/{problemId}:
+    get:
+      summary: Get a single problem
+      parameters:
+        - in: path
+          name: problemId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  problem: { $ref: '#/components/schemas/Problem' }
+        '404': { description: Problem not found }
+  /api/progress/{problemId}:
+    patch:
+      summary: Mark a problem complete / incomplete
+      parameters:
+        - in: path
+          name: problemId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [completed]
+              properties:
+                completed: { type: boolean }
+                notes: { type: string }
+      responses:
+        '200': { description: OK }
+        '404': { description: Problem not found }
+  /api/progress/me:
+    get:
+      summary: Current user's progress list
+      responses:
+        '200': { description: OK }
+  /api/progress/stats:
+    get:
+      summary: Current user's stats (totals, by difficulty, by topic)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stats: { $ref: '#/components/schemas/Stats' }
+  /api/progress/user/{userId}:
+    get:
+      summary: Progress by user id (ownership-enforced — must match the token)
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+        '403': { description: Cannot access another user's progress }
