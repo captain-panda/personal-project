@@ -12,7 +12,7 @@ cache-aside read path, hardened JWT auth, and graceful degradation when Redis is
 ## Architecture at a glance
 
 ```
-React (Vite + Tailwind)  ──HTTPS──►  Express API  ──►  MongoDB (Atlas)
+React (Vite + Tailwind)  ──HTTPS──►  NestJS API   ──►  MongoDB (Atlas)
    S3 + CloudFront                   EC2/ECS + ALB        Redis (cache + auth denylist)
 ```
 
@@ -25,7 +25,7 @@ React (Vite + Tailwind)  ──HTTPS──►  Express API  ──►  MongoDB (
 
 ```
 .
-├── server/      # Node.js + Express API (ESM)
+├── server/      # NestJS API (TypeScript)
 ├── client/      # React SPA (Vite + Tailwind)
 ├── docs/        # System design, DB schema, API spec, deployment guide
 └── README.md
@@ -45,7 +45,7 @@ cd server
 cp .env.example .env          # then edit MONGO_URI (Atlas or local)
 npm install
 npm run seed                  # loads the sample DSA sheet + a test user
-npm run dev                   # http://localhost:5000
+npm run start:dev             # http://localhost:5000
 
 # 2. Frontend (separate terminal)
 cd client
@@ -62,11 +62,11 @@ npm run dev                   # http://localhost:5173
 
 ## Scripts
 
-| Location | Command            | Purpose                                  |
-| -------- | ------------------ | ---------------------------------------- |
-| server   | `npm run dev`      | Start API with watch reload              |
-| server   | `npm run seed`     | Seed topics, problems, and a test user   |
-| server   | `npm test`         | Unit + integration tests (Vitest)        |
+| Location | Command             | Purpose                                  |
+| -------- | ------------------- | ---------------------------------------- |
+| server   | `npm run start:dev` | Start API with watch reload              |
+| server   | `npm run seed`      | Seed topics, problems, and a test user   |
+| server   | `npm test`          | Unit + integration tests (Jest)          |
 | client   | `npm run dev`      | Start the React dev server               |
 | client   | `npm run build`    | Production build to `dist/`              |
 

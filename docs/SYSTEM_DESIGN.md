@@ -20,7 +20,7 @@ A MERN application for tracking progress across a structured DSA sheet, designed
               ┌─────────────┼─────────────┐
               ▼             ▼             ▼
 ┌───────────────────────────────────────────────────────────────┐
-│  API — Node.js + Express (stateless, Auto Scaling Group)       │
+│  API — NestJS (Express platform, stateless, Auto Scaling Group)│
 │  Auth · Topics · Problems · Progress · /healthz /readyz /metrics│
 └──────────────┬─────────────────────────────┬──────────────────┘
                │                             │
