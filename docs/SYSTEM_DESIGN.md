@@ -150,7 +150,14 @@ Design rules this surfaced: size Mongo for Redis-loss read load; N+AZ headroom; 
 
 ---
 
-## 8. AWS deployment
+## 8. Deployment
+
+The platform is **designed** for AWS at scale (the reference architecture in §8.1) but is
+**currently deployed** on equivalent free-tier managed services (§8.2). The application code is
+identical in both cases — it is cloud-agnostic by design (stateless, 12-factor, env-driven) — so
+moving between them changes only *where the container runs* and *what the env vars point at*.
+
+### 8.1 Reference architecture (AWS — the scale target)
 
 | Component | Service | Notes |
 | --- | --- | --- |
@@ -162,6 +169,52 @@ Design rules this surfaced: size Mongo for Redis-loss read load; N+AZ headroom; 
 | DNS | **Route 53** | `app.*` → CloudFront, `api.*` → ALB |
 | Secrets | **Secrets Manager** / SSM | `JWT_*`, `MONGO_URI`, `REDIS_URL` |
 | Logs/metrics | **CloudWatch** | logs + alarms; Synthetics canary for external uptime |
+
+### 8.2 Actual deployment (free-tier managed services)
+
+What is live today, and the one-to-one mapping back to the AWS design:
+
+```
+┌─────────────────────────────┐     ┌──────────────────────────────┐
+│  Vercel  (React SPA)         │     │  was: S3 + CloudFront        │
+│  global CDN · auto-TLS       │────▶│  per-commit deploys          │
+└──────────────┬──────────────┘     └──────────────────────────────┘
+               │ HTTPS  (Bearer access token + httpOnly refresh cookie)
+               ▼
+┌─────────────────────────────┐     ┌──────────────────────────────┐
+│  Render  (NestJS container)  │     │  was: ECS Fargate + ALB      │
+│  managed HTTPS · /healthz    │────▶│  rolling deploys · autoscale │
+└───────┬─────────────────┬───┘     └──────────────────────────────┘
+        ▼                 ▼
+┌────────────────┐  ┌──────────────┐  ┌────────────────────────────┐
+│ Upstash Redis  │  │ MongoDB Atlas│  │ was: ElastiCache + Atlas   │
+│ L2 cache+auth  │  │ M0 replica   │  │ (Atlas was already planned)│
+└────────────────┘  └──────────────┘  └────────────────────────────┘
+```
+
+| Concern | AWS design | Free-tier deployment | Why they are equivalent |
+| --- | --- | --- | --- |
+| Static hosting + CDN | S3 + CloudFront | **Vercel** | Global edge CDN, automatic TLS, atomic per-commit deploys + instant rollback |
+| API container host | ECS Fargate + ALB | **Render** | Managed container runtime, HTTPS termination, `/healthz` health checks, rolling deploys, horizontal scaling on paid tiers |
+| Database | MongoDB Atlas | **MongoDB Atlas (M0)** | Same provider — Atlas was the planned DB in both |
+| Cache + auth denylist | ElastiCache Redis | **Upstash Redis** | Managed Redis over TLS; same `ioredis` client, same key semantics |
+| Secrets | Secrets Manager | Render/Vercel env vars | Encrypted at rest, injected at runtime |
+| TLS / DNS | ACM + Route 53 | Provider-managed | Both platforms issue and renew certificates automatically |
+
+#### Why Render + Vercel instead of AWS
+
+1. **Cost — the decisive factor for a demo.** A faithful AWS deployment of this stack (ALB ≈ $16/mo, ECS Fargate tasks, a Multi-AZ ElastiCache node, a NAT gateway, an Atlas M30) is **≈ $150–300+/month** with no traffic to justify it. The free-tier stack is **$0/month**. For a portfolio project with no revenue and demo-level load, paying for idle multi-AZ capacity buys nothing.
+2. **The architecture is preserved, not compromised.** The logical topology — *CDN → stateless app → cache + database* — is realised exactly; only the managed providers differ. Each AWS box has a direct free-tier counterpart (table above), so the design being demonstrated is the same design.
+3. **The app was built cloud-agnostic on purpose.** Stateless API, all config via env vars, Redis *optional* at runtime, standard health endpoints. Nothing about Render or Vercel is load-bearing in the code. That portability is itself a design goal worth showing.
+4. **Time-to-public-URL.** Render and Vercel deploy straight from a Git push — no VPC, subnets, security groups, task definitions, IAM roles, or Terraform. Minutes instead of hours, which matters for an iteration-and-demo workflow.
+5. **The free-tier trade-offs are ones the design already tolerates:**
+   - *Render free instances sleep after ~15 min idle (≈30 s cold start).* The graceful boot + `/healthz` make this safe; a paid tier removes sleep entirely. Mitigated for a demo with a warm-up request.
+   - *Single instance, no Multi-AZ.* The multi-AZ resilience story is design-validated rather than live, but the **code paths it relies on are all exercised**: graceful Redis degradation, fail-open auth, retryable Mongo.
+   - *Upstash free has a daily command cap.* The two-tier L1 cache keeps Redis traffic low, and the app degrades to L1 + Mongo if the cap is hit — already built in.
+
+#### Migration back to AWS is a non-event
+
+Build the same Docker image → push to ECR → run on ECS behind an ALB; repoint Vercel's `VITE_API_URL` at the ALB; move Redis to ElastiCache and set `REDIS_URL`. **No application code changes** — which is the strongest evidence that the AWS design and the free-tier deployment are the same system.
 
 ### Deploy outline
 ```bash
