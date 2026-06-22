@@ -34,7 +34,13 @@ const IGNORED_LOG_PATHS = ['/healthz', '/readyz', '/metrics'];
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      // Tests must be hermetic: never read the developer's .env (which may point
+      // at a real Redis/Mongo). Config comes solely from process.env under test.
+      ignoreEnvFile: process.env.NODE_ENV === 'test',
+      validate: validateEnv,
+    }),
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.NODE_ENV === 'test' ? 'silent' : process.env.LOG_LEVEL || 'info',
