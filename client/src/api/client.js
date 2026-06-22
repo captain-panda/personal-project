@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// In production the API is served same-origin via a Vercel rewrite (/api/* →
+// Render), so the refresh cookie is first-party. Always use a relative base URL
+// in production builds; only dev talks to localhost (or an explicit VITE_API_URL).
+const baseURL = import.meta.env.PROD ? '' : import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 // Access token lives in memory only (never localStorage). The refresh token is
 // an httpOnly cookie the browser sends automatically with withCredentials.
