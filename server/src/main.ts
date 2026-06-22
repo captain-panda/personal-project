@@ -25,7 +25,21 @@ async function bootstrap() {
   app.use(compression());
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
-  app.enableCors({ origin: config.CLIENT_ORIGIN, credentials: true });
+
+  // CLIENT_ORIGIN may be a comma-separated allowlist (e.g. a stable prod domain
+  // plus preview URLs). Credentialed CORS cannot use "*", so we echo back the
+  // request's Origin only when it is on the list. Requests with no Origin
+  // (curl, server-to-server, health checks) are allowed through.
+  const allowedOrigins = config.CLIENT_ORIGIN.split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  app.enableCors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
+    credentials: true,
+  });
   app.enableShutdownHooks(); // graceful shutdown → OnModuleDestroy hooks
 
   await app.listen(config.PORT);
